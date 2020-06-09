@@ -1,0 +1,22 @@
+[package]
+name = "csvpsql"
+version = "0.1.0"
+authors = ["Matthieu Guilbert <guil.matthieu@gmail.com>"]
+edition = "2018"
+license-file = "LICENSE"
+description = "Generate Postgres table from csv file."
+
+# See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
+
+[dependencies]
+chrono = "0.4"
+csv = "1.1"
+dtparse = "1.0"
+itertools = "0.9"
+structopt = "0.3"
+
+[profile.dev]
+opt-level = 0
+
+[profile.release]
+opt-level = 3
