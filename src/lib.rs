@@ -10,7 +10,7 @@
 //!
 //! ```bash
 //! USAGE:
-//! csvpsql [FLAGS] [OPTIONS] [file]
+//!     csvpsql [FLAGS] [OPTIONS] --table-name <table-name> [file]
 //!
 //! FLAGS:
 //!         --help         Prints help information
@@ -18,8 +18,10 @@
 //!     -V, --version      Prints version information
 //!
 //! OPTIONS:
-//!     -d, --delimiter <delimiter>     [default: ,]
-//!     -n, --null-as <null-as>        Empty string are null by default [default: ]
+//!         --columns <columns>          Override column name. Separated by comma. Use the csv header or letters by default.
+//!     -d, --delimiter <delimiter>       [default: ,]
+//!     -n, --null-as <null-as>          Empty string are null by default [default: ]
+//!     -t, --table-name <table-name>    File name is used as default
 //!
 //! ARGS:
 //!     <file>
