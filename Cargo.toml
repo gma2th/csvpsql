@@ -1,10 +1,12 @@
 [package]
 name = "csvpsql"
-version = "0.1.1"
+version = "0.1.2"
 authors = ["Matthieu Guilbert <guil.matthieu@gmail.com>"]
 edition = "2018"
 license-file = "LICENSE"
 description = "Generate Postgres table from csv file."
+repository = "https://github.com/gma2th/csvpsql"
+documentation = "https://docs.rs/crate/csvpsql/"
 
 # See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
 
