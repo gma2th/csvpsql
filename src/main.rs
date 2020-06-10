@@ -4,8 +4,8 @@ use structopt::StructOpt;
 
 fn main() {
     let opt = Opt::from_args();
-    if let Err(err) = csvpsql::run(opt) {
-        println!("{}", err);
+    if let Err(e) = csvpsql::run(opt) {
+        eprintln!("Application error: {}", e);
         process::exit(1);
     }
 }

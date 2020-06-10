@@ -29,7 +29,7 @@
 //!
 //! ```bash
 //! $ csvpsql example.csv
-//! create table test (
+//! create table example (
 //!    city text not null,
 //!    region text not null,
 //!    country text not null,
@@ -57,6 +57,12 @@ pub struct Opt {
     pub delimiter: char,
 
     #[structopt(
+        long,
+        help = "Override column name. Separated by comma. Use the csv header or letters by default."
+    )]
+    pub columns: Option<String>,
+
+    #[structopt(
         short,
         long,
         default_value = "",
@@ -66,6 +72,14 @@ pub struct Opt {
 
     #[structopt(parse(from_os_str))]
     pub file: Option<PathBuf>,
+
+    #[structopt(
+        short,
+        long,
+        required_unless = "file",
+        help = "File name is used as default"
+    )]
+    pub table_name: Option<String>,
 }
 
 // TODO: Add missing column types
@@ -172,7 +186,8 @@ fn find_constraint(field: &str, null_as: &str) -> ColumnConstraint {
 }
 
 pub fn run(opt: Opt) -> Result<(), Box<dyn Error>> {
-    let reader: Box<dyn BufRead> = match opt.file {
+    // Read from file or stdin
+    let reader: Box<dyn BufRead> = match opt.file.clone() {
         None => Box::new(BufReader::new(io::stdin())),
         Some(filename) => Box::new(BufReader::new(fs::File::open(filename).unwrap())),
     };
@@ -181,8 +196,24 @@ pub fn run(opt: Opt) -> Result<(), Box<dyn Error>> {
         .delimiter(opt.delimiter as u8)
         .from_reader(reader);
 
-    let mut column_types = vec![ColumnType::Unknown; rdr.headers()?.len()];
-    let mut column_constraints = vec![ColumnConstraint::Nullable; rdr.headers()?.len()];
+    let number_of_columns = rdr.headers()?.len();
+
+    // Error check
+    if rdr.records().peekable().peek().is_none() {
+        return Err(Box::from("csv file has no records."));
+    }
+    if let Some(names) = &opt.columns {
+        if names.len() != number_of_columns {
+            return Err(Box::from(
+                "There is more columns in the file than provided by columns option.",
+            ));
+        }
+    }
+
+    // Parse csv
+    let mut column_types = vec![ColumnType::Unknown; number_of_columns];
+    let mut column_constraints = vec![ColumnConstraint::Nullable; number_of_columns];
+
     for result in rdr.records() {
         let record = result?;
         for (i, field) in record.iter().enumerate() {
@@ -197,15 +228,18 @@ pub fn run(opt: Opt) -> Result<(), Box<dyn Error>> {
         }
     }
 
-    let headers: Vec<&str> = match opt.no_header {
-        false => rdr.headers()?.iter().collect(),
-        true => "a,b,c,d,e,f,g,h,i,j,k,l,m,n,o,p,q,r,s,t,u,v,w,x,y,z"
-            .split(",")
+    // Create table
+
+    let column_names: Vec<&str> = match (&opt.columns, opt.no_header) {
+        (Some(names), _) => names.split(',').collect(),
+        (None, false) => rdr.headers()?.iter().collect(),
+        (None, true) => "a,b,c,d,e,f,g,h,i,j,k,l,m,n,o,p,q,r,s,t,u,v,w,x,y,z"
+            .split(',')
             .take(rdr.headers()?.len())
             .collect(),
     };
 
-    let columns: Columns = izip!(headers, column_types, column_constraints)
+    let columns: Columns = izip!(column_names, column_types, column_constraints)
         .map(|(name, ctype, constraint)| Column {
             name: name.to_owned(),
             ctype,
@@ -213,9 +247,14 @@ pub fn run(opt: Opt) -> Result<(), Box<dyn Error>> {
         })
         .collect();
 
-    let table_name = String::from("test");
+    let table_name = match (&opt.table_name, &opt.file) {
+        (Some(name), _) => name,
+        (None, Some(file)) => file.file_stem().unwrap().to_str().unwrap(),
+        _ => "csvpsql", // cannot happen due to structopt rules
+    };
+
     let table = Table {
-        name: table_name,
+        name: table_name.to_string(),
         columns,
     };
 

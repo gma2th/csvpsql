@@ -31,7 +31,7 @@ ARGS:
 
 ```bash
 $ csvpsql example.csv
-create table test (
+create table example (
    city text not null,
    region text not null,
    country text not null,
