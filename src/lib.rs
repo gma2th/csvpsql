@@ -40,6 +40,7 @@
 //! ```
 
 use chrono::NaiveTime;
+use csv::StringRecord;
 use itertools::izip;
 use std::error::Error;
 use std::fmt;
@@ -90,7 +91,7 @@ enum ColumnType {
     Unknown,
     Boolean,
     Integer,
-    Double,
+    Numeric,
     Date,
     Timestamp,
     Text,
@@ -127,7 +128,7 @@ impl fmt::Display for Column {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         write!(
             f,
-            "    {} {} {}",
+            "{} {} {}",
             self.name.replace(" ", "_"),
             self.ctype,
             self.constraint,
@@ -164,6 +165,9 @@ fn try_parse_date(field: &str) -> Result<ColumnType, dtparse::ParseError> {
 }
 
 fn find_type(field: &str) -> ColumnType {
+    if field.is_empty() {
+        return ColumnType::Unknown;
+    }
     if [String::from("true"), String::from("false")].contains(&field.to_lowercase()) {
         return ColumnType::Boolean;
     }
@@ -171,7 +175,7 @@ fn find_type(field: &str) -> ColumnType {
         return ColumnType::Integer;
     }
     if field.parse::<f64>().is_ok() {
-        return ColumnType::Double;
+        return ColumnType::Numeric;
     }
     if let Ok(c) = try_parse_date(field) {
         return c;
@@ -185,6 +189,44 @@ fn find_constraint(field: &str, null_as: &str) -> ColumnConstraint {
     } else {
         ColumnConstraint::NotNull
     }
+}
+
+fn get_table_name(table_name: Option<String>, file: Option<PathBuf>) -> String {
+    let table_name = match (&table_name, &file) {
+        (Some(name), _) => name,
+        (None, Some(file)) => file.file_stem().unwrap().to_str().unwrap(),
+        _ => "csvpsql", // cannot happen due to structopt rules
+    };
+    table_name.to_owned()
+}
+
+fn get_column_names<'a>(
+    columns: Option<&'a str>,
+    no_header: bool,
+    header: &'a StringRecord,
+) -> Vec<&'a str> {
+    match (columns, no_header) {
+        (Some(names), _) => names.split(',').collect(),
+        (None, false) => header.iter().collect(),
+        (None, true) => "a,b,c,d,e,f,g,h,i,j,k,l,m,n,o,p,q,r,s,t,u,v,w,x,y,z"
+            .split(',')
+            .take(header.len())
+            .collect(),
+    }
+}
+
+fn get_columns(
+    column_names: Vec<&str>,
+    column_types: Vec<ColumnType>,
+    column_constraints: Vec<ColumnConstraint>,
+) -> Columns {
+    izip!(column_names, column_types, column_constraints)
+        .map(|(name, ctype, constraint)| Column {
+            name: name.to_owned(),
+            ctype,
+            constraint,
+        })
+        .collect()
 }
 
 pub fn run(opt: Opt) -> Result<(), Box<dyn Error>> {
@@ -230,33 +272,20 @@ pub fn run(opt: Opt) -> Result<(), Box<dyn Error>> {
         }
     }
 
-    // Create table
-
-    let column_names: Vec<&str> = match (&opt.columns, opt.no_header) {
-        (Some(names), _) => names.split(',').collect(),
-        (None, false) => rdr.headers()?.iter().collect(),
-        (None, true) => "a,b,c,d,e,f,g,h,i,j,k,l,m,n,o,p,q,r,s,t,u,v,w,x,y,z"
-            .split(',')
-            .take(rdr.headers()?.len())
-            .collect(),
-    };
-
-    let columns: Columns = izip!(column_names, column_types, column_constraints)
-        .map(|(name, ctype, constraint)| Column {
-            name: name.to_owned(),
-            ctype,
-            constraint,
+    let column_types = column_types
+        .iter()
+        .map(|x| match x {
+            ColumnType::Unknown => ColumnType::Text,
+            a => a.clone(),
         })
         .collect();
 
-    let table_name = match (&opt.table_name, &opt.file) {
-        (Some(name), _) => name,
-        (None, Some(file)) => file.file_stem().unwrap().to_str().unwrap(),
-        _ => "csvpsql", // cannot happen due to structopt rules
-    };
-
+    // Create table
+    let column_names = get_column_names(opt.columns.as_deref(), opt.no_header, rdr.headers()?);
+    let columns = get_columns(column_names, column_types, column_constraints);
+    let table_name = get_table_name(opt.table_name, opt.file);
     let table = Table {
-        name: table_name.to_string(),
+        name: table_name,
         columns,
     };
 
@@ -268,6 +297,8 @@ pub fn run(opt: Opt) -> Result<(), Box<dyn Error>> {
 mod test {
     #[allow(unused)]
     use super::*;
+    #[allow(unused)]
+    use std::path::Path;
 
     #[test]
     fn test_find_type() {
@@ -275,12 +306,13 @@ mod test {
         assert_eq!(find_type("false"), ColumnType::Boolean);
         assert_eq!(find_type("TRUE"), ColumnType::Boolean);
         assert_eq!(find_type("0"), ColumnType::Integer);
-        assert_eq!(find_type("0.0"), ColumnType::Double);
+        assert_eq!(find_type("0.0"), ColumnType::Numeric);
     }
 
     #[test]
     fn test_parse_date() {
         assert_eq!(try_parse_date("2020-01-01"), Ok(ColumnType::Date));
+        assert_eq!(dtparse::parse(""), Ok(()));
         assert_eq!(
             try_parse_date("2020-01-01 18:30:04 +02:00"),
             Ok(ColumnType::Timestamp)
@@ -291,5 +323,23 @@ mod test {
     fn test_find_constraint() {
         assert_eq!(find_constraint("", ""), ColumnConstraint::Nullable);
         assert_eq!(find_constraint("smth", ""), ColumnConstraint::NotNull);
+    }
+
+    #[test]
+    fn test_get_table_name() {
+        assert_eq!(
+            get_table_name(
+                Option::from("t".to_owned()),
+                Option::from(PathBuf::from(Box::from(Path::new("f.csv"))))
+            ),
+            "t"
+        );
+        assert_eq!(
+            get_table_name(
+                None,
+                Option::from(PathBuf::from(Box::from(Path::new("f.csv"))))
+            ),
+            "f"
+        );
     }
 }
