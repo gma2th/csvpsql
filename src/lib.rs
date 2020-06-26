@@ -126,13 +126,7 @@ struct Column {
 
 impl fmt::Display for Column {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        write!(
-            f,
-            "{} {} {}",
-            self.name.replace(" ", "_"),
-            self.ctype,
-            self.constraint,
-        )
+        write!(f, "{} {} {}", self.name, self.ctype, self.constraint,)
     }
 }
 
@@ -200,29 +194,29 @@ fn get_table_name(table_name: Option<String>, file: Option<PathBuf>) -> String {
     table_name.to_owned()
 }
 
-fn get_column_names<'a>(
-    columns: Option<&'a str>,
-    no_header: bool,
-    header: &'a StringRecord,
-) -> Vec<&'a str> {
+fn get_column_names(columns: Option<&str>, no_header: bool, header: &StringRecord) -> Vec<String> {
     match (columns, no_header) {
-        (Some(names), _) => names.split(',').collect(),
-        (None, false) => header.iter().collect(),
+        (Some(names), _) => names.split(',').map(|x| x.to_string()).collect(),
+        (None, false) => header
+            .iter()
+            .map(|x| x.to_lowercase().replace(" ", "_"))
+            .collect(),
         (None, true) => "a,b,c,d,e,f,g,h,i,j,k,l,m,n,o,p,q,r,s,t,u,v,w,x,y,z"
             .split(',')
             .take(header.len())
+            .map(|x| x.to_string())
             .collect(),
     }
 }
 
 fn get_columns(
-    column_names: Vec<&str>,
+    column_names: Vec<String>,
     column_types: Vec<ColumnType>,
     column_constraints: Vec<ColumnConstraint>,
 ) -> Columns {
     izip!(column_names, column_types, column_constraints)
         .map(|(name, ctype, constraint)| Column {
-            name: name.to_owned(),
+            name,
             ctype,
             constraint,
         })
