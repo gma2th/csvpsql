@@ -1,6 +1,6 @@
 [package]
 name = "csvpsql"
-version = "0.1.4"
+version = "0.1.5"
 authors = ["Matthieu Guilbert <guil.matthieu@gmail.com>"]
 edition = "2018"
 license-file = "LICENSE"

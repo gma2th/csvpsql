@@ -13,12 +13,14 @@
 //!     csvpsql [FLAGS] [OPTIONS] --table-name <table-name> [file]
 //!
 //! FLAGS:
-//!         --help         Prints help information
-//!     -h, --no-header
-//!     -V, --version      Prints version information
+//!         --drop          To drop the table if exists
+//!     -h, --help          Prints help information
+//!         --no-copy       To remove copy command
+//!         --no-header     Whenever the csv file has no header
+//!     -V, --version       Prints version information
 //!
 //! OPTIONS:
-//!         --columns <columns>          Override column name. Separated by comma. Use the csv header or letters by default.
+//!     -c, --columns <columns>          Override column name. Separated by comma. Use the csv header or letters by default.
 //!     -d, --delimiter <delimiter>       [default: ,]
 //!     -n, --null-as <null-as>          Empty string are null by default [default: ]
 //!     -t, --table-name <table-name>    File name is used as default
@@ -30,13 +32,17 @@
 //! # Example
 //!
 //! ```bash
-//! $ csvpsql example.csv
+//! $ csvpsql --drop example.csv
+//! drop table if exists example;
+//!
 //! create table example (
 //!    city text not null,
 //!    region text not null,
 //!    country text not null,
 //!    population integer not null
 //!);
+//!
+//! \copy example from 'example.csv' with csv delimiter ',' header;
 //! ```
 
 use chrono::NaiveTime;
@@ -53,13 +59,20 @@ use structopt::StructOpt;
 #[derive(Debug, StructOpt)]
 #[structopt(name = "csvpsql", about = "Parse csv to sql tables.")]
 pub struct Opt {
-    #[structopt(short = "h", long)]
+    #[structopt(long, help="Whenever the csv file has no header")]
     pub no_header: bool,
+
+    #[structopt(long, help="To remove copy command")]
+    pub no_copy: bool,
+
+    #[structopt(long, help="To add drop query")]
+    pub drop: bool,
 
     #[structopt(short, long, default_value = ",")]
     pub delimiter: char,
 
     #[structopt(
+        short,
         long,
         help = "Override column name. Separated by comma. Use the csv header or letters by default."
     )]
@@ -223,6 +236,7 @@ fn get_columns(
 
 pub fn run(opt: Opt) -> Result<(), Box<dyn Error>> {
     // Read from file or stdin
+    let filename = opt.file.clone();
     let reader: Box<dyn BufRead> = match opt.file.clone() {
         None => Box::new(BufReader::new(io::stdin())),
         Some(filename) => Box::new(BufReader::new(fs::File::open(filename).unwrap())),
@@ -281,7 +295,23 @@ pub fn run(opt: Opt) -> Result<(), Box<dyn Error>> {
         columns,
     };
 
+
+    if opt.drop {
+        println!("drop table if exists {};\n", table.name)
+    }
+
     println!("{}", table);
+
+    let mut copy_cmd = format!(r"\copy {} from", table.name);
+    copy_cmd = match filename {
+        None => format!("{} stdin", copy_cmd),
+        Some(s) => format!("{} '{}'", copy_cmd, s.display()),
+    };
+    copy_cmd = format!("{} with csv delimiter '{}'", copy_cmd, opt.delimiter);
+    if !opt.no_header {
+        copy_cmd = format!("{} header", copy_cmd)
+    };
+    println!("{};", copy_cmd);
 
     Ok(())
 }
