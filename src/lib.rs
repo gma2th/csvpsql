@@ -158,23 +158,21 @@ fn try_parse_date(field: &str) -> Result<ColumnType, dtparse::ParseError> {
     }
 }
 
-fn find_type(field: &str) -> ColumnType {
-    if field.is_empty() {
-        return ColumnType::Unknown;
+fn find_type(xfield: &str) -> ColumnType {
+    let parsed_field = xfield.to_lowercase();
+    match parsed_field.as_str() {
+        field if field.is_empty() => ColumnType::Unknown,
+        "true" | "false" => ColumnType::Boolean,
+        field if field.parse::<isize>().is_ok() => ColumnType::Integer,
+        field if field.parse::<f64>().is_ok() => ColumnType::Numeric,
+        field => {
+            if let Ok(c) = try_parse_date(field) {
+                c
+            } else {
+                ColumnType::Text
+            }
+        }
     }
-    if [String::from("true"), String::from("false")].contains(&field.to_lowercase()) {
-        return ColumnType::Boolean;
-    }
-    if field.parse::<isize>().is_ok() {
-        return ColumnType::Integer;
-    }
-    if field.parse::<f64>().is_ok() {
-        return ColumnType::Numeric;
-    }
-    if let Ok(c) = try_parse_date(field) {
-        return c;
-    }
-    ColumnType::Text
 }
 
 fn find_constraint(field: &str, null_as: &str) -> ColumnConstraint {
